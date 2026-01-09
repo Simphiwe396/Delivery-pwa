@@ -1,1 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Delivery PWA</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+</head>
+<body>
+<h2>🚴 Delivery Tracker</h2>
+
+<select id="rate">
+  <option value="5">R5 per km</option>
+  <option value="10">R10 per km</option>
+  <option value="20">R20 per km</option>
+</select>
+
+<button onclick="startTrip()">Start Delivery</button>
+<button onclick="finishTrip()">Finish Delivery</button>
+
+<div id="info"></div>
+<div id="map"></div>
+
+<h3>Trip History</h3>
+<ul id="history"></ul>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
 
