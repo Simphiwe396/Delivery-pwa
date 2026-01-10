@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const http = require("http");
 const socketIo = require("socket.io");
-const Trip = require("./models/trip");  // Changed to lowercase 't'
+const Trip = require("./models/Trip");
 
 const app = express();
 const server = http.createServer(app);
