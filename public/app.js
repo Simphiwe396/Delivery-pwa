@@ -58,8 +58,6 @@ function initializeMaps() {
     navigator.geolocation.getCurrentPosition(position => {
       const { latitude, longitude } = position.coords;
       map.setView([latitude, longitude], 15);
-    }, () => {
-      console.log('Could not get current location');
     });
   }
 }
@@ -111,7 +109,7 @@ function updateConnectionStatus(connected) {
   }
 }
 
-// Start new trip
+// Start new trip - FIXED: Simplified request
 async function startTrip() {
   if (!navigator.geolocation) {
     alert('Geolocation is not supported by your browser');
@@ -146,21 +144,17 @@ async function startTrip() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          riderName,
+          riderName: riderName,
           pickupLat: latitude,
           pickupLng: longitude,
           lat: latitude,
           lng: longitude,
-          rate,
-          status: 'active',
-          distance: 0,
-          fare: 0
+          rate: rate
         })
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create trip');
+        throw new Error('Failed to create trip');
       }
       
       const trip = await response.json();
@@ -189,16 +183,14 @@ async function startTrip() {
       socket.emit('driverStatus', {
         tripId: trip._id,
         status: 'active',
-        riderName,
+        riderName: riderName,
         lat: latitude,
         lng: longitude
       });
       
-      console.log('Trip started:', trip._id);
-      
     } catch (error) {
       console.error('Error starting trip:', error);
-      alert('Failed to start trip: ' + error.message);
+      alert('Failed to start trip. Please try again.');
     }
   }, handleGeolocationError);
 }
@@ -214,15 +206,17 @@ function updateLocation(position) {
   map.setView([latitude, longitude], 15);
   
   if (tripId && currentTrip) {
+    // Calculate distance
     const distance = calculateDistance(
-      currentTrip.pickupLat || latitude,
-      currentTrip.pickupLng || longitude,
+      currentTrip.pickupLat,
+      currentTrip.pickupLng,
       latitude,
       longitude
     );
     
-    const fare = distance * (currentTrip.rate || 10);
+    const fare = distance * currentTrip.rate;
     
+    // Update trip info
     updateTripInfo({
       distance: distance.toFixed(2),
       fare: fare.toFixed(2)
@@ -242,8 +236,6 @@ function updateLocation(position) {
         fare: parseFloat(fare.toFixed(2)),
         status: 'active'
       })
-    }).catch(error => {
-      console.error('Error updating location:', error);
     });
     
     // Emit real-time update
@@ -278,13 +270,13 @@ async function finishTrip() {
     const { latitude, longitude } = position.coords;
     
     const distance = calculateDistance(
-      currentTrip.pickupLat || latitude,
-      currentTrip.pickupLng || longitude,
+      currentTrip.pickupLat,
+      currentTrip.pickupLng,
       latitude,
       longitude
     );
     
-    const fare = distance * (currentTrip.rate || 10);
+    const fare = distance * currentTrip.rate;
     
     try {
       const response = await fetch('/api/finish-trip', {
