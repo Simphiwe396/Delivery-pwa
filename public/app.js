@@ -1,123 +1,83 @@
-let map = L.map("map").setView([0, 0], 13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+let map = L.map('map').setView([0,0], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let marker, tripId, startPos;
+let marker;
+let tripId;
+let watchId;
 
-const startBtn = document.getElementById("startBtn");
-const finishBtn = document.getElementById("finishBtn");
-const shareBtn = document.getElementById("shareBtn");
-const invoiceBtn = document.getElementById("invoiceBtn");
-const info = document.getElementById("info");
-const stepTitle = document.getElementById("stepTitle");
-const stepDesc = document.getElementById("stepDesc");
-
-navigator.geolocation.getCurrentPosition(p => {
-  map.setView([p.coords.latitude, p.coords.longitude], 15);
+navigator.geolocation.getCurrentPosition(pos => {
+  map.setView([pos.coords.latitude, pos.coords.longitude], 15);
 });
 
-function updateRoleUI() {
-  const role = document.getElementById("role").value;
-  const modeTitle = document.getElementById("modeTitle");
-  const modeDesc = document.getElementById("modeDesc");
-
-  if (role === "customer") {
-    modeTitle.innerText = "Customer mode";
-    modeDesc.innerText = "Track and share your delivery with recipients.";
-  } else {
-    modeTitle.innerText = "Courier mode";
-    modeDesc.innerText = "Deliver packages with live GPS tracking.";
-  }
-}
-
-function km(a, b, c, d) {
+function distance(lat1, lon1, lat2, lon2) {
   const R = 6371;
-  const dLat = (c - a) * Math.PI / 180;
-  const dLon = (d - b) * Math.PI / 180;
-  return R * 2 * Math.asin(Math.sqrt(
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(a * Math.PI / 180) *
-    Math.cos(c * Math.PI / 180) *
-    Math.sin(dLon / 2) ** 2
-  ));
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLon = (lon2-lon1) * Math.PI/180;
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 async function startTrip() {
-  navigator.geolocation.getCurrentPosition(async p => {
-    startPos = p.coords;
-    marker = L.marker([p.coords.latitude, p.coords.longitude]).addTo(map);
+  navigator.geolocation.getCurrentPosition(async pos => {
+    marker = L.marker([pos.coords.latitude, pos.coords.longitude]).addTo(map);
+
+    const rate = Number(document.getElementById("rate").value);
 
     const res = await fetch("/api/trip", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
-        role: role.value,
-        startLat: p.coords.latitude,
-        startLng: p.coords.longitude,
-        lat: p.coords.latitude,
-        lng: p.coords.longitude,
-        rate: +rate.value,
-        status: "active"
+        pickupLat: pos.coords.latitude,
+        pickupLng: pos.coords.longitude,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        rate
       })
     });
 
-    tripId = (await res.json())._id;
+    const trip = await res.json();
+    tripId = trip._id;
 
-    startBtn.style.display = "none";
-    finishBtn.style.display = "block";
-    shareBtn.style.display = "block";
+    watchId = navigator.geolocation.watchPosition(p => {
+      marker.setLatLng([p.coords.latitude, p.coords.longitude]);
 
-    stepTitle.innerText = "Step 2: Delivery in progress";
-    stepDesc.innerText = "You can share the live tracking link with the recipient.";
-    info.innerText = "📍 Live tracking active…";
+      fetch("/api/update-location", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          id: tripId,
+          lat: p.coords.latitude,
+          lng: p.coords.longitude,
+          status: "active"
+        })
+      });
+    });
   });
 }
 
 async function finishTrip() {
-  navigator.geolocation.getCurrentPosition(async p => {
-    const d = km(
-      startPos.latitude,
-      startPos.longitude,
-      p.coords.latitude,
-      p.coords.longitude
-    );
+  navigator.geolocation.clearWatch(watchId);
+  document.getElementById("info").innerText = "Delivery Finished";
+  loadHistory();
+}
 
-    const f = Math.round(d * rate.value);
+async function loadHistory() {
+  const res = await fetch("/api/trips");
+  const trips = await res.json();
+  const list = document.getElementById("history");
+  list.innerHTML = "";
 
-    await fetch("/api/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: tripId,
-        lat: p.coords.latitude,
-        lng: p.coords.longitude,
-        distance: d,
-        fare: f,
-        status: "completed"
-      })
-    });
-
-    finishBtn.style.display = "none";
-    shareBtn.style.display = "none";
-    invoiceBtn.style.display = "block";
-
-    stepTitle.innerText = "Step 3: Delivery completed";
-    stepDesc.innerText = "Download the invoice or close the app.";
-    info.innerText = `✅ Delivery completed — Fare: R${f}`;
+  trips.forEach(t => {
+    const li = document.createElement("li");
+    li.innerText = `Fare: R${(t.distance || 0) * t.rate}`;
+    list.appendChild(li);
   });
 }
 
-function shareTrip() {
-  const msg = `Track your SwiftDrop delivery:\n${location.href}`;
-  open(`https://wa.me/?text=${encodeURIComponent(msg)}`);
-}
-
-function downloadInvoice() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  doc.text("SwiftDrop Invoice", 20, 20);
-  doc.text(info.innerText, 20, 40);
-  doc.save("SwiftDrop-Invoice.pdf");
-}
+loadHistory();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js");

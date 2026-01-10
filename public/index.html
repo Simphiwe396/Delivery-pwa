@@ -1,59 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>SwiftDrop</title>
+  <title>Delivery PWA</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
 </head>
 <body>
+<h2>🚴 Delivery Tracker</h2>
 
-<header>
-  <h1>SwiftDrop</h1>
-  <p>Fast. Tracked. Reliable.</p>
-</header>
+<select id="rate">
+  <option value="5">R5 per km</option>
+  <option value="10">R10 per km</option>
+  <option value="20">R20 per km</option>
+</select>
 
-<div class="card">
-  <h3 id="modeTitle">Choose your role</h3>
-  <p id="modeDesc">Select how you are using the app</p>
+<button onclick="startTrip()">Start Delivery</button>
+<button onclick="finishTrip()">Finish Delivery</button>
 
-  <select id="role" onchange="updateRoleUI()">
-    <option value="customer">👤 Customer (Send / Track Delivery)</option>
-    <option value="driver">🚴 Courier (Deliver Package)</option>
-  </select>
-</div>
-
-<div class="card">
-  <h3 id="stepTitle">Step 1: Start delivery</h3>
-  <p id="stepDesc">
-    Press start when the delivery begins. Live tracking will activate.
-  </p>
-
-  <label>Delivery rate</label>
-  <select id="rate">
-    <option value="5">R5 per km</option>
-    <option value="10">R10 per km</option>
-    <option value="20">R20 per km</option>
-  </select>
-
-  <button id="startBtn" onclick="startTrip()">▶ Start Delivery</button>
-  <button id="finishBtn" onclick="finishTrip()" style="display:none">✔ Finish Delivery</button>
-  <button id="shareBtn" onclick="shareTrip()" style="display:none">📲 Share Tracking (WhatsApp)</button>
-  <button id="invoiceBtn" onclick="downloadInvoice()" style="display:none">📄 Download Invoice (PDF)</button>
-</div>
-
+<div id="info"></div>
 <div id="map"></div>
 
-<div class="card" id="info">
-  Waiting to start a delivery…
-</div>
-
-<div class="card">
-  <a href="/admin.html">🔐 Open Admin Dashboard</a>
-</div>
+<h3>Trip History</h3>
+<ul id="history"></ul>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
