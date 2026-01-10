@@ -149,6 +149,17 @@ function useMyLocation(type) {
     });
 }
 
+// Add this function to your app.js (anywhere near other functions)
+function geocodeCurrent(type) {
+    const address = document.getElementById(`${type}Address`).value;
+    if (!address) {
+        alert("Please enter an address first");
+        return;
+    }
+    
+    geocodeAddress(type);
+}
+
 // Geocode address - FIXED VERSION
 function geocodeAddress(type) {
     const addressInput = document.getElementById(`${type}Address`).value.toLowerCase().trim();
