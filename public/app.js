@@ -35,9 +35,17 @@ function startTracking(driverId) {
         return;
     }
     
+    console.log(`Starting tracking for ${driverId}`);
+    
     // Disable start button, enable stop button
-    document.getElementById(`startBtn${driverId.charAt(6)}`).disabled = true;
-    document.getElementById(`stopBtn${driverId.charAt(6)}`).disabled = false;
+    const driverNum = driverId === 'driver1' ? '1' : '2';
+    document.getElementById(`startBtn${driverNum}`).disabled = true;
+    document.getElementById(`stopBtn${driverNum}`).disabled = false;
+    
+    // Clear any existing watch
+    if (watchIds[driverId]) {
+        navigator.geolocation.clearWatch(watchIds[driverId]);
+    }
     
     // Start watching position
     watchIds[driverId] = navigator.geolocation.watchPosition(
@@ -51,7 +59,7 @@ function startTracking(driverId) {
         {
             enableHighAccuracy: true,
             maximumAge: 0,
-            timeout: 5000
+            timeout: 10000
         }
     );
     
@@ -60,20 +68,40 @@ function startTracking(driverId) {
 
 // Stop tracking a driver
 function stopTracking(driverId) {
+    console.log(`Stopping tracking for ${driverId}`);
+    
+    // Stop watching position
     if (watchIds[driverId]) {
         navigator.geolocation.clearWatch(watchIds[driverId]);
         delete watchIds[driverId];
-        
-        // Enable start button, disable stop button
-        document.getElementById(`startBtn${driverId.charAt(6)}`).disabled = false;
-        document.getElementById(`stopBtn${driverId.charAt(6)}`).disabled = true;
-        
-        console.log(`Stopped tracking ${driverId}`);
+        console.log(`Cleared watch for ${driverId}`);
     }
+    
+    // Enable start button, disable stop button
+    const driverNum = driverId === 'driver1' ? '1' : '2';
+    document.getElementById(`startBtn${driverNum}`).disabled = false;
+    document.getElementById(`stopBtn${driverNum}`).disabled = true;
+    
+    // Remove marker from map
+    if (markers[driverId]) {
+        map.removeLayer(markers[driverId]);
+        delete markers[driverId];
+    }
+    
+    // Clear position
+    delete driverPositions[driverId];
+    
+    // Update display
+    updateDriverInfo();
+    
+    console.log(`Stopped tracking ${driverId}`);
+    alert(`Stopped tracking ${driverId}`);
 }
 
 // Update driver position on server
 function updateDriverPosition(driverId, lat, lng) {
+    console.log(`Updating ${driverId}: ${lat}, ${lng}`);
+    
     // Store locally
     driverPositions[driverId] = {
         lat: lat,
@@ -86,6 +114,11 @@ function updateDriverPosition(driverId, lat, lng) {
     
     // Send to server
     fetch(`/api/update-location?driverId=${driverId}&lat=${lat}&lng=${lng}`)
+        .then(response => {
+            if (!response.ok) {
+                console.log("Server update failed");
+            }
+        })
         .catch(err => console.log("Could not update server:", err));
     
     // Update display
@@ -98,8 +131,10 @@ function updateMarker(driverId, lat, lng) {
     const iconHtml = `<div style="background-color:${color}; width:20px; height:20px; border-radius:50%; border:2px solid white;"></div>`;
     
     if (markers[driverId]) {
+        // Update existing marker
         markers[driverId].setLatLng([lat, lng]);
     } else {
+        // Create new marker
         markers[driverId] = L.marker([lat, lng], {
             icon: L.divIcon({
                 html: iconHtml,
@@ -128,9 +163,9 @@ function loadDrivers() {
     fetch('/api/drivers')
         .then(response => response.json())
         .then(drivers => {
-            // Update local positions
+            // Update local positions for drivers not being tracked locally
             for (const driverId in drivers) {
-                if (!watchIds[driverId]) { // Only update if not being tracked locally
+                if (!watchIds[driverId]) { // Only update if not being tracked by this device
                     const driver = drivers[driverId];
                     driverPositions[driverId] = driver;
                     updateMarker(driverId, driver.lat, driver.lng);
@@ -138,7 +173,9 @@ function loadDrivers() {
             }
             updateDriverInfo();
         })
-        .catch(err => console.log("Could not load drivers:", err));
+        .catch(err => {
+            // Silently ignore errors - app keeps working
+        });
 }
 
 // Update driver information display
