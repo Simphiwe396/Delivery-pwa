@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Delivery Quote Calculator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { color: #333; text-align: center; }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        input, select, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background: #45a049; }
+        .quote-result {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        .map-container {
+            height: 300px;
+            margin: 20px 0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .history-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <h1>🚚 Delivery Quote Calculator</h1>
+    
+    <div class="card">
+        <h2>📍 Enter Locations</h2>
+        <button onclick="useMyLocation('pickup')">Use My Location for Pickup</button>
+        <input type="text" id="pickupAddress" placeholder="Pickup Address" onchange="geocodeAddress('pickup')">
+        
+        <button onclick="useMyLocation('dropoff')">Use My Location for Drop-off</button>
+        <input type="text" id="dropoffAddress" placeholder="Customer Address" onchange="geocodeAddress('dropoff')">
+        
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>💰 Set Rate</h2>
+        <select id="rate">
+            <option value="5">R5 per kilometer</option>
+            <option value="10" selected>R10 per kilometer</option>
+            <option value="15">R15 per kilometer</option>
+            <option value="20">R20 per kilometer</option>
+        </select>
+        
+        <button onclick="calculateQuote()">Calculate Delivery Quote</button>
+        
+        <div class="quote-result" id="quoteResult">
+            <h3>Your Quote:</h3>
+            <p>Distance: <span id="distance">0</span> km</p>
+            <p>Rate: R<span id="rateDisplay">10</span> per km</p>
+            <h2>Total: R<span id="total">0</span></h2>
+        </div>
+        
+        <button onclick="saveQuote()" style="background: #2196F3;">Save This Quote</button>
+        <button onclick="startDelivery()" style="background: #4CAF50;">Start Delivery</button>
+    </div>
+    
+    <div class="card">
+        <h2>📋 Recent Quotes (Last 50)</h2>
+        <div id="history"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 {
-  "name": "driver-tracker",
+  "name": "delivery-quote-calculator",
   "version": "1.0.0",
-  "description": "Simple Driver Tracking App",
+  "description": "Simple delivery quote calculator",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
