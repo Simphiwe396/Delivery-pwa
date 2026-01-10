@@ -2,12 +2,12 @@ const express = require('express');
 const path = require('path');
 const app = express();
 
-// Serve static files
-app.use(express.static(__dirname));
+// Serve static files from PUBLIC folder
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve index.html for all routes (for PWA)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
