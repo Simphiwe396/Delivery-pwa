@@ -1,8 +1,84 @@
 {
-  "name": "Delivery PWA",
+  "name": "Delivery Tracker PWA",
   "short_name": "Delivery",
+  "description": "Real-time delivery tracking progressive web app",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000"
+  "theme_color": "#4a6fa5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot1.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshot2.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": ["business", "productivity", "navigation"],
+  "shortcuts": [
+    {
+      "name": "Start New Delivery",
+      "short_name": "Start",
+      "description": "Start a new delivery trip",
+      "url": "/?start=true",
+      "icons": [{ "src": "/shortcut-icon.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Track Delivery",
+      "short_name": "Track",
+      "description": "Track active deliveries",
+      "url": "/?track=true",
+      "icons": [{ "src": "/track-icon.png", "sizes": "96x96" }]
+    }
+  ]
 }

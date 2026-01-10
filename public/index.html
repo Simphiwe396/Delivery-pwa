@@ -2,29 +2,145 @@
 <html>
 <head>
   <title>Delivery PWA</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-<h2>🚴 Delivery Tracker</h2>
+  <div class="container">
+    <header>
+      <h1><i class="fas fa-motorcycle"></i> Delivery Tracker</h1>
+      <div class="status-badge" id="connectionStatus">Online</div>
+    </header>
 
-<select id="rate">
-  <option value="5">R5 per km</option>
-  <option value="10">R10 per km</option>
-  <option value="20">R20 per km</option>
-</select>
+    <div class="tabs">
+      <button class="tab-button active" onclick="showTab('rider')">Rider View</button>
+      <button class="tab-button" onclick="showTab('customer')">Customer View</button>
+      <button class="tab-button" onclick="showTab('history')">Trip History</button>
+    </div>
 
-<button onclick="startTrip()">Start Delivery</button>
-<button onclick="finishTrip()">Finish Delivery</button>
+    <!-- Rider Tab -->
+    <div id="rider-tab" class="tab-content active">
+      <div class="card">
+        <h2><i class="fas fa-biking"></i> Start Delivery</h2>
+        
+        <div class="form-group">
+          <label for="riderName">Rider Name:</label>
+          <input type="text" id="riderName" placeholder="Enter your name" value="Delivery Rider">
+        </div>
+        
+        <div class="form-group">
+          <label for="rate">Rate per km:</label>
+          <select id="rate">
+            <option value="5">R5 per km</option>
+            <option value="10" selected>R10 per km</option>
+            <option value="15">R15 per km</option>
+            <option value="20">R20 per km</option>
+            <option value="25">R25 per km</option>
+          </select>
+        </div>
 
-<div id="info"></div>
-<div id="map"></div>
+        <div class="button-group">
+          <button class="btn btn-primary" onclick="startTrip()" id="startBtn">
+            <i class="fas fa-play"></i> Start Delivery
+          </button>
+          <button class="btn btn-secondary" onclick="finishTrip()" id="finishBtn" disabled>
+            <i class="fas fa-flag-checkered"></i> Finish Delivery
+          </button>
+          <button class="btn btn-danger" onclick="cancelTrip()" id="cancelBtn" disabled>
+            <i class="fas fa-times"></i> Cancel Trip
+          </button>
+        </div>
+      </div>
 
-<h3>Trip History</h3>
-<ul id="history"></ul>
+      <div class="card">
+        <h2><i class="fas fa-map-marker-alt"></i> Current Trip Info</h2>
+        <div id="tripInfo">
+          <p><i class="fas fa-road"></i> Distance: <span id="distance">0</span> km</p>
+          <p><i class="fas fa-money-bill-wave"></i> Fare: R<span id="fare">0</span></p>
+          <p><i class="fas fa-bolt"></i> Status: <span id="status">Not started</span></p>
+          <p><i class="fas fa-clock"></i> Duration: <span id="duration">0:00</span></p>
+        </div>
+      </div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="app.js"></script>
+      <div class="card">
+        <h2><i class="fas fa-map"></i> Live Location</h2>
+        <div id="map"></div>
+      </div>
+    </div>
+
+    <!-- Customer Tab -->
+    <div id="customer-tab" class="tab-content">
+      <div class="card">
+        <h2><i class="fas fa-user"></i> Track Delivery</h2>
+        
+        <div class="form-group">
+          <label for="tripSelect">Select Active Trip:</label>
+          <select id="tripSelect" onchange="selectTripToTrack()">
+            <option value="">Select a trip to track</option>
+          </select>
+        </div>
+
+        <div id="trackingInfo" class="hidden">
+          <h3>Trip Details</h3>
+          <p>Rider: <span id="trackRiderName">-</span></p>
+          <p>Distance: <span id="trackDistance">0</span> km</p>
+          <p>Fare: R<span id="trackFare">0</span></p>
+          <p>Status: <span id="trackStatus">-</span></p>
+          <p>Last Updated: <span id="lastUpdated">-</span></p>
+          
+          <button class="btn btn-primary" onclick="navigateToDriver()">
+            <i class="fas fa-directions"></i> Navigate to Driver
+          </button>
+        </div>
+
+        <div class="card">
+          <h2><i class="fas fa-location-dot"></i> Driver Location</h2>
+          <div id="trackingMap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- History Tab -->
+    <div id="history-tab" class="tab-content">
+      <div class="card">
+        <h2><i class="fas fa-history"></i> Trip History (Last 50)</h2>
+        <div class="search-box">
+          <input type="text" id="searchHistory" placeholder="Search trips..." onkeyup="searchTrips()">
+        </div>
+        <div class="table-container">
+          <table id="historyTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Rider</th>
+                <th>Distance</th>
+                <th>Rate</th>
+                <th>Fare</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody">
+              <!-- Filled by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+        <div class="stats">
+          <p>Total Trips: <span id="totalTrips">0</span></p>
+          <p>Total Distance: <span id="totalDistance">0</span> km</p>
+          <p>Total Earnings: R<span id="totalEarnings">0</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.io Client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
