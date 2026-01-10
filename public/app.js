@@ -5,12 +5,12 @@ let quotes = JSON.parse(localStorage.getItem('deliveryQuotes') || '[]');
 let currentPickup = null;
 let currentDropoff = null;
 
-// SOUTH AFRICAN CITIES DATABASE
+// SOUTH AFRICAN CITIES DATABASE - INCLUDES KEMPTON PARK
 const saCities = {
-    // Gauteng
+    // Gauteng - INCLUDES KEMPTON PARK
     "johannesburg": [-26.2041, 28.0473],
     "pretoria": [-25.7479, 28.2293],
-    "kempton park": [-26.1103, 28.2285], // ADDED: Kempton Park
+    "kempton park": [-26.1103, 28.2285], // <-- THIS IS THE FIX
     "sandton": [-26.107, 28.0517],
     "randburg": [-26.0946, 28.0012],
     "midrand": [-25.989, 28.128],
@@ -98,12 +98,11 @@ const saCities = {
 function initApp() {
     initMap();
     loadHistory();
-    updateQuoteDisplay();
     
     // Show welcome message
     if (!localStorage.getItem('welcomeShown')) {
         setTimeout(() => {
-            showAlert("🚚 Welcome to QuickQuote Pro!\n\n1. Enter pickup & drop-off locations\n2. Choose your rate (R5-R20/km)\n3. Get instant delivery quotes\n4. Save for your records", "info");
+            alert("🚚 Welcome to QuickQuote Pro!\n\n1. Enter pickup & drop-off locations\n2. Choose your rate (R5-R20/km)\n3. Get instant delivery quotes\n4. Save for your records");
             localStorage.setItem('welcomeShown', 'true');
         }, 1000);
     }
@@ -113,24 +112,22 @@ function initApp() {
 function initMap() {
     map = L.map('map').setView([-26.1103, 28.2285], 13); // Start at Kempton Park
     
-    // Professional map tiles
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap, © CartoDB',
         maxZoom: 19
     }).addTo(map);
     
-    // Add scale
     L.control.scale().addTo(map);
 }
 
 // Use current location
 function useMyLocation(type) {
     if (!navigator.geolocation) {
-        showAlert("Geolocation not available", "error");
+        alert("Geolocation not available");
         return;
     }
     
-    showAlert("Getting your location...", "info");
+    alert("Getting your location...");
     
     navigator.geolocation.getCurrentPosition(position => {
         const lat = position.coords.latitude;
@@ -139,96 +136,56 @@ function useMyLocation(type) {
         if (type === 'pickup') {
             currentPickup = { lat, lng };
             updateMarker('pickup', lat, lng);
-            reverseGeocode(lat, lng, 'pickupAddress');
-            showAlert("Pickup location set to your current position", "success");
+            alert("Pickup location set to your current position");
         } else {
             currentDropoff = { lat, lng };
             updateMarker('dropoff', lat, lng);
-            reverseGeocode(lat, lng, 'dropoffAddress');
-            showAlert("Drop-off location set to your current position", "success");
+            alert("Drop-off location set to your current position");
         }
         
         map.setView([lat, lng], 15);
     }, () => {
-        showAlert("Could not get your location. Please enable location services.", "error");
+        alert("Could not get your location");
     });
 }
 
-// Geocode current input - SIMPLE SA CITY SEARCH
-function geocodeCurrent(type) {
-    const address = document.getElementById(`${type}Address`).value;
-    if (!address) {
-        showAlert("Please enter an address", "warning");
-        return;
-    }
-    
-    geocodeAddress(type);
-}
-
-// Updated geocode function - SIMPLE SA CITY SEARCH
+// Geocode address - FIXED VERSION
 function geocodeAddress(type) {
     const addressInput = document.getElementById(`${type}Address`).value.toLowerCase().trim();
     
     if (!addressInput) {
-        showAlert("Please enter an address", "warning");
+        alert("Please enter an address");
         return;
     }
     
-    showAlert("Searching for location...", "info");
-    
-    // Check if it's a known South African city/location
-    let foundCity = null;
-    let foundCoords = null;
-    
-    // Direct match
-    if (saCities[addressInput]) {
-        foundCity = addressInput;
-        foundCoords = saCities[addressInput];
-    } else {
-        // Partial match (search in city names)
-        for (const [city, coords] of Object.entries(saCities)) {
-            if (addressInput.includes(city) || city.includes(addressInput)) {
-                foundCity = city;
-                foundCoords = coords;
-                break;
+    // Check SA cities database FIRST
+    for (const [city, coords] of Object.entries(saCities)) {
+        if (addressInput.includes(city)) {
+            const lat = coords[0];
+            const lng = coords[1];
+            
+            if (type === 'pickup') {
+                currentPickup = { lat, lng };
+                updateMarker('pickup', lat, lng);
+            } else {
+                currentDropoff = { lat, lng };
+                updateMarker('dropoff', lat, lng);
             }
+            
+            map.setView([lat, lng], 15);
+            document.getElementById(`${type}Address`).value = city.charAt(0).toUpperCase() + city.slice(1);
+            alert(`Location set to ${city.charAt(0).toUpperCase() + city.slice(1)}`);
+            
+            if (currentPickup && currentDropoff) {
+                setTimeout(calculateQuote, 500);
+            }
+            return; // Exit function - FOUND!
         }
     }
     
-    if (foundCity && foundCoords) {
-        const lat = foundCoords[0];
-        const lng = foundCoords[1];
-        
-        if (type === 'pickup') {
-            currentPickup = { lat, lng };
-            updateMarker('pickup', lat, lng);
-        } else {
-            currentDropoff = { lat, lng };
-            updateMarker('dropoff', lat, lng);
-        }
-        
-        map.setView([lat, lng], 15);
-        showAlert(`Location set to ${foundCity.charAt(0).toUpperCase() + foundCity.slice(1)}`, "success");
-        
-        // Update address field with proper name
-        document.getElementById(`${type}Address`).value = foundCity.charAt(0).toUpperCase() + foundCity.slice(1);
-        
-        // Update route line
-        updateRouteLine();
-        
-        // Auto-calculate if both locations set
-        if (currentPickup && currentDropoff) {
-            setTimeout(calculateQuote, 500);
-        }
-    } else {
-        // Try OpenStreetMap as fallback
-        tryOpenStreetMap(addressInput, type);
-    }
-}
-
-// Fallback to OpenStreetMap
-function tryOpenStreetMap(address, type) {
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ', South Africa')}&limit=1`)
+    // If not found in database, try OpenStreetMap
+    alert("Searching online...");
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressInput + ', South Africa')}&limit=1`)
         .then(response => response.json())
         .then(data => {
             if (data.length > 0) {
@@ -244,41 +201,22 @@ function tryOpenStreetMap(address, type) {
                 }
                 
                 map.setView([lat, lng], 15);
-                showAlert("Address found!", "success");
+                alert("Address found!");
                 
-                // Update route line
-                updateRouteLine();
-                
-                // Auto-calculate if both locations set
                 if (currentPickup && currentDropoff) {
                     setTimeout(calculateQuote, 500);
                 }
             } else {
-                showAlert(`Location not found. Try: Johannesburg, Cape Town, Durban, Pretoria, Kempton Park, etc.`, "error");
-                
-                // Suggest nearby cities
-                suggestNearbyCities();
+                alert(`Try these cities: Johannesburg, Cape Town, Durban, Pretoria, Kempton Park, Sandton, etc.`);
             }
         })
         .catch(error => {
-            console.error("Geocoding error:", error);
-            showAlert("Search service unavailable. Try 'Use My Location' or enter a city name.", "error");
+            alert("Search service unavailable. Try 'Use My Location' or enter a city name.");
         });
 }
 
-// Suggest nearby cities
-function suggestNearbyCities() {
-    const suggestions = [
-        "Johannesburg", "Pretoria", "Kempton Park", "Sandton",
-        "Cape Town", "Durban", "Bloemfontein", "Port Elizabeth"
-    ];
-    
-    console.log("Try these cities:", suggestions.join(", "));
-}
-
-// Update marker on map
+// Update marker
 function updateMarker(type, lat, lng) {
-    // Professional truck icons
     const pickupIcon = L.divIcon({
         className: 'custom-marker',
         html: `<div style="background: linear-gradient(135deg, #4361ee, #3a0ca3); 
@@ -315,11 +253,10 @@ function updateMarker(type, lat, lng) {
             .bindPopup('<b>📦 Drop-off Location</b>');
     }
     
-    // Update route line
     updateRouteLine();
 }
 
-// Update route line between points
+// Update route line
 function updateRouteLine() {
     if (window.routeLine) map.removeLayer(window.routeLine);
     
@@ -334,7 +271,6 @@ function updateRouteLine() {
             dashArray: '10, 10'
         }).addTo(map);
         
-        // Fit map to show both points
         const bounds = L.latLngBounds(
             [currentPickup.lat, currentPickup.lng],
             [currentDropoff.lat, currentDropoff.lng]
@@ -357,7 +293,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 // Calculate quote
 function calculateQuote() {
     if (!currentPickup || !currentDropoff) {
-        showAlert("Please set both pickup and drop-off locations", "warning");
+        alert("Please set both pickup and drop-off locations");
         return;
     }
     
@@ -369,29 +305,23 @@ function calculateQuote() {
     const rate = parseFloat(document.getElementById('rate').value);
     const total = distance * rate;
     
-    // Update display
     document.getElementById('distanceDisplay').textContent = distance.toFixed(2) + ' km';
     document.getElementById('rateDisplay').textContent = rate.toFixed(2);
     document.getElementById('totalDisplay').textContent = 'R' + total.toFixed(2);
     
-    // Estimate time (avg 40km/h in city)
     const estimatedMinutes = Math.max(10, Math.round((distance / 40) * 60));
-    document.getElementById('timeDisplay').textContent = estimatedMinutes + '-'
-        + (estimatedMinutes + 5) + ' min';
+    document.getElementById('timeDisplay').textContent = estimatedMinutes + '-' + (estimatedMinutes + 5) + ' min';
     
-    // Show results
     document.getElementById('quoteResult').style.display = 'block';
-    
-    // Scroll to results
     document.getElementById('quoteResult').scrollIntoView({ behavior: 'smooth' });
     
-    showAlert("Quote calculated successfully!", "success");
+    alert("Quote calculated successfully!");
 }
 
 // Save quote
 function saveQuote() {
     if (!currentPickup || !currentDropoff) {
-        showAlert("Please calculate a quote first", "warning");
+        alert("Please calculate a quote first");
         return;
     }
     
@@ -421,7 +351,7 @@ function saveQuote() {
     localStorage.setItem('deliveryQuotes', JSON.stringify(quotes));
     loadHistory();
     
-    showAlert("Quote saved to history!", "success");
+    alert("Quote saved to history!");
 }
 
 // Load history
@@ -486,52 +416,20 @@ function loadQuote(id) {
         document.getElementById('pickupAddress').value = 'Previous pickup location';
         document.getElementById('dropoffAddress').value = 'Previous drop-off location';
         
-        showAlert("Previous quote loaded!", "info");
-        
-        // Auto-calculate
+        alert("Previous quote loaded!");
         setTimeout(calculateQuote, 500);
     }
-}
-
-// Reverse geocode
-function reverseGeocode(lat, lng, elementId) {
-    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.display_name) {
-                // Shorten address for display
-                const address = data.display_name.split(',')[0];
-                document.getElementById(elementId).value = address;
-            }
-        });
 }
 
 // Start delivery
 function startDelivery() {
     if (!currentPickup || !currentDropoff) {
-        showAlert("Please set locations first", "warning");
+        alert("Please set locations first");
         return;
     }
     
     if (confirm("Start delivery with this quote?\n\nTotal: " + document.getElementById('totalDisplay').textContent)) {
-        showAlert("Delivery started! Tracking activated.", "success");
-        // Here you would add tracking functionality
-    }
-}
-
-// Show alert
-function showAlert(message, type) {
-    // Simple alert for now
-    alert(message);
-}
-
-// Update quote display
-function updateQuoteDisplay() {
-    if (quotes.length > 0) {
-        const lastQuote = quotes[0];
-        document.getElementById('distanceDisplay').textContent = lastQuote.distance.toFixed(2) + ' km';
-        document.getElementById('rateDisplay').textContent = lastQuote.rate;
-        document.getElementById('totalDisplay').textContent = 'R' + lastQuote.total.toFixed(2);
+        alert("Delivery started!");
     }
 }
 
