@@ -5,6 +5,95 @@ let quotes = JSON.parse(localStorage.getItem('deliveryQuotes') || '[]');
 let currentPickup = null;
 let currentDropoff = null;
 
+// SOUTH AFRICAN CITIES DATABASE
+const saCities = {
+    // Gauteng
+    "johannesburg": [-26.2041, 28.0473],
+    "pretoria": [-25.7479, 28.2293],
+    "kempton park": [-26.1103, 28.2285], // ADDED: Kempton Park
+    "sandton": [-26.107, 28.0517],
+    "randburg": [-26.0946, 28.0012],
+    "midrand": [-25.989, 28.128],
+    "centurion": [-25.874, 28.229],
+    "soweto": [-26.2678, 27.8585],
+    "alberton": [-26.267, 28.122],
+    "roodepoort": [-26.1625, 27.8725],
+    "boksburg": [-26.211, 28.259],
+    "benoni": [-26.1833, 28.3167],
+    "springs": [-26.25, 28.4],
+    "brakpan": [-26.236, 28.369],
+    "krugersdorp": [-26.1, 27.7667],
+    "carletonville": [-26.361, 27.398],
+    "vereeniging": [-26.673, 27.926],
+    "vanderbijlpark": [-26.699, 27.786],
+    
+    // Western Cape
+    "cape town": [-33.9249, 18.4241],
+    "stellenbosch": [-33.932, 18.860],
+    "paarl": [-33.734, 18.975],
+    "wellington": [-33.640, 19.011],
+    "worcester": [-33.646, 19.448],
+    "george": [-33.988, 22.453],
+    "mossel bay": [-34.183, 22.146],
+    
+    // KwaZulu-Natal
+    "durban": [-29.8587, 31.0218],
+    "pietermaritzburg": [-29.601, 30.379],
+    "richards bay": [-28.780, 32.037],
+    "newcastle": [-27.758, 29.931],
+    "ladysmith": [-28.560, 29.780],
+    
+    // Eastern Cape
+    "port elizabeth": [-33.9608, 25.6022],
+    "east london": [-33.029, 27.854],
+    "grahamstown": [-33.311, 26.525],
+    "queenstown": [-31.897, 26.875],
+    
+    // Free State
+    "bloemfontein": [-29.0852, 26.1596],
+    "welkom": [-27.977, 26.735],
+    "kroonstad": [-27.650, 27.234],
+    "bethlehem": [-28.231, 28.307],
+    
+    // Mpumalanga
+    "nelspruit": [-25.4745, 30.9703],
+    "witbank": [-25.874, 29.255],
+    "middelburg": [-25.775, 29.465],
+    "ermelo": [-26.533, 29.985],
+    
+    // Limpopo
+    "polokwane": [-23.8962, 29.4486],
+    "tzaneen": [-23.833, 30.163],
+    "phalaborwa": [-23.945, 31.141],
+    
+    // North West
+    "rustenburg": [-25.654, 27.255],
+    "potchefstroom": [-26.7167, 27.1],
+    "klerksdorp": [-26.867, 26.668],
+    "mahikeng": [-25.865, 25.644],
+    
+    // Northern Cape
+    "kimberley": [-28.7282, 24.7499],
+    "upington": [-28.457, 21.242],
+    "springbok": [-29.664, 17.886],
+    
+    // Major Shopping Centers
+    "mall of africa": [-26.051, 28.109],
+    "menlyn mall": [-25.783, 28.275],
+    "gateway mall": [-29.758, 31.059],
+    "cavendish square": [-33.989, 18.464],
+    "tyger valley": [-33.846, 18.637],
+    
+    // Airports
+    "or tambo airport": [-26.133, 28.246],
+    "cape town international": [-33.965, 18.602],
+    "king shaka airport": [-29.614, 31.120],
+    
+    // Specific for your client
+    "birchleigh": [-26.100, 28.230],
+    "birchleigh north": [-26.095, 28.225]
+};
+
 // Initialize app
 function initApp() {
     initMap();
@@ -14,7 +103,7 @@ function initApp() {
     // Show welcome message
     if (!localStorage.getItem('welcomeShown')) {
         setTimeout(() => {
-            alert("🚚 Welcome to QuickQuote Pro!\n\n1. Set pickup & drop-off locations\n2. Choose your rate\n3. Get instant delivery quotes\n4. Save for your records");
+            showAlert("🚚 Welcome to QuickQuote Pro!\n\n1. Enter pickup & drop-off locations\n2. Choose your rate (R5-R20/km)\n3. Get instant delivery quotes\n4. Save for your records", "info");
             localStorage.setItem('welcomeShown', 'true');
         }, 1000);
     }
@@ -22,7 +111,7 @@ function initApp() {
 
 // Initialize map
 function initMap() {
-    map = L.map('map').setView([-26.2041, 28.0473], 13);
+    map = L.map('map').setView([-26.1103, 28.2285], 13); // Start at Kempton Park
     
     // Professional map tiles
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -65,16 +154,126 @@ function useMyLocation(type) {
     });
 }
 
-// Geocode current input
+// Geocode current input - SIMPLE SA CITY SEARCH
 function geocodeCurrent(type) {
     const address = document.getElementById(`${type}Address`).value;
     if (!address) {
-        showAlert("Please enter an address first", "warning");
+        showAlert("Please enter an address", "warning");
         return;
     }
     
-    showAlert("Searching for address...", "info");
     geocodeAddress(type);
+}
+
+// Updated geocode function - SIMPLE SA CITY SEARCH
+function geocodeAddress(type) {
+    const addressInput = document.getElementById(`${type}Address`).value.toLowerCase().trim();
+    
+    if (!addressInput) {
+        showAlert("Please enter an address", "warning");
+        return;
+    }
+    
+    showAlert("Searching for location...", "info");
+    
+    // Check if it's a known South African city/location
+    let foundCity = null;
+    let foundCoords = null;
+    
+    // Direct match
+    if (saCities[addressInput]) {
+        foundCity = addressInput;
+        foundCoords = saCities[addressInput];
+    } else {
+        // Partial match (search in city names)
+        for (const [city, coords] of Object.entries(saCities)) {
+            if (addressInput.includes(city) || city.includes(addressInput)) {
+                foundCity = city;
+                foundCoords = coords;
+                break;
+            }
+        }
+    }
+    
+    if (foundCity && foundCoords) {
+        const lat = foundCoords[0];
+        const lng = foundCoords[1];
+        
+        if (type === 'pickup') {
+            currentPickup = { lat, lng };
+            updateMarker('pickup', lat, lng);
+        } else {
+            currentDropoff = { lat, lng };
+            updateMarker('dropoff', lat, lng);
+        }
+        
+        map.setView([lat, lng], 15);
+        showAlert(`Location set to ${foundCity.charAt(0).toUpperCase() + foundCity.slice(1)}`, "success");
+        
+        // Update address field with proper name
+        document.getElementById(`${type}Address`).value = foundCity.charAt(0).toUpperCase() + foundCity.slice(1);
+        
+        // Update route line
+        updateRouteLine();
+        
+        // Auto-calculate if both locations set
+        if (currentPickup && currentDropoff) {
+            setTimeout(calculateQuote, 500);
+        }
+    } else {
+        // Try OpenStreetMap as fallback
+        tryOpenStreetMap(addressInput, type);
+    }
+}
+
+// Fallback to OpenStreetMap
+function tryOpenStreetMap(address, type) {
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ', South Africa')}&limit=1`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.length > 0) {
+                const lat = parseFloat(data[0].lat);
+                const lng = parseFloat(data[0].lon);
+                
+                if (type === 'pickup') {
+                    currentPickup = { lat, lng };
+                    updateMarker('pickup', lat, lng);
+                } else {
+                    currentDropoff = { lat, lng };
+                    updateMarker('dropoff', lat, lng);
+                }
+                
+                map.setView([lat, lng], 15);
+                showAlert("Address found!", "success");
+                
+                // Update route line
+                updateRouteLine();
+                
+                // Auto-calculate if both locations set
+                if (currentPickup && currentDropoff) {
+                    setTimeout(calculateQuote, 500);
+                }
+            } else {
+                showAlert(`Location not found. Try: Johannesburg, Cape Town, Durban, Pretoria, Kempton Park, etc.`, "error");
+                
+                // Suggest nearby cities
+                suggestNearbyCities();
+            }
+        })
+        .catch(error => {
+            console.error("Geocoding error:", error);
+            showAlert("Search service unavailable. Try 'Use My Location' or enter a city name.", "error");
+        });
+}
+
+// Suggest nearby cities
+function suggestNearbyCities() {
+    const suggestions = [
+        "Johannesburg", "Pretoria", "Kempton Park", "Sandton",
+        "Cape Town", "Durban", "Bloemfontein", "Port Elizabeth"
+    ];
+    
+    console.log("Try these cities:", suggestions.join(", "));
 }
 
 // Update marker on map
@@ -294,37 +493,6 @@ function loadQuote(id) {
     }
 }
 
-// Geocode address
-function geocodeAddress(type) {
-    const address = document.getElementById(`${type}Address`).value;
-    if (!address) return;
-    
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&countrycodes=za`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.length > 0) {
-                const lat = parseFloat(data[0].lat);
-                const lng = parseFloat(data[0].lon);
-                
-                if (type === 'pickup') {
-                    currentPickup = { lat, lng };
-                    updateMarker('pickup', lat, lng);
-                } else {
-                    currentDropoff = { lat, lng };
-                    updateMarker('dropoff', lat, lng);
-                }
-                
-                map.setView([lat, lng], 15);
-                showAlert("Address found on map!", "success");
-            } else {
-                showAlert("Address not found. Please try a different address.", "error");
-            }
-        })
-        .catch(() => {
-            showAlert("Search service unavailable. Please try again.", "error");
-        });
-}
-
 // Reverse geocode
 function reverseGeocode(lat, lng, elementId) {
     fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`)
@@ -353,8 +521,8 @@ function startDelivery() {
 
 // Show alert
 function showAlert(message, type) {
-    // Simple alert for now - could be enhanced with toast notifications
-    console.log(`${type.toUpperCase()}: ${message}`);
+    // Simple alert for now
+    alert(message);
 }
 
 // Update quote display
