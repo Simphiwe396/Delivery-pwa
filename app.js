@@ -1,26 +1,47 @@
-// Simple app - NO DATABASE, everything in browser memory
+// QuickQuote Pro - Professional Delivery Calculator
 let map;
 let pickupMarker, dropoffMarker;
 let quotes = JSON.parse(localStorage.getItem('deliveryQuotes') || '[]');
 let currentPickup = null;
 let currentDropoff = null;
 
+// Initialize app
+function initApp() {
+    initMap();
+    loadHistory();
+    updateQuoteDisplay();
+    
+    // Show welcome message
+    if (!localStorage.getItem('welcomeShown')) {
+        setTimeout(() => {
+            alert("🚚 Welcome to QuickQuote Pro!\n\n1. Set pickup & drop-off locations\n2. Choose your rate\n3. Get instant delivery quotes\n4. Save for your records");
+            localStorage.setItem('welcomeShown', 'true');
+        }, 1000);
+    }
+}
+
 // Initialize map
 function initMap() {
     map = L.map('map').setView([-26.2041, 28.0473], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+    
+    // Professional map tiles
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap, © CartoDB',
+        maxZoom: 19
     }).addTo(map);
     
-    loadHistory();
+    // Add scale
+    L.control.scale().addTo(map);
 }
 
 // Use current location
 function useMyLocation(type) {
     if (!navigator.geolocation) {
-        alert("Geolocation not available");
+        showAlert("Geolocation not available", "error");
         return;
     }
+    
+    showAlert("Getting your location...", "info");
     
     navigator.geolocation.getCurrentPosition(position => {
         const lat = position.coords.latitude;
@@ -30,39 +51,102 @@ function useMyLocation(type) {
             currentPickup = { lat, lng };
             updateMarker('pickup', lat, lng);
             reverseGeocode(lat, lng, 'pickupAddress');
+            showAlert("Pickup location set to your current position", "success");
         } else {
             currentDropoff = { lat, lng };
             updateMarker('dropoff', lat, lng);
             reverseGeocode(lat, lng, 'dropoffAddress');
+            showAlert("Drop-off location set to your current position", "success");
         }
         
         map.setView([lat, lng], 15);
+    }, () => {
+        showAlert("Could not get your location. Please enable location services.", "error");
     });
+}
+
+// Geocode current input
+function geocodeCurrent(type) {
+    const address = document.getElementById(`${type}Address`).value;
+    if (!address) {
+        showAlert("Please enter an address first", "warning");
+        return;
+    }
+    
+    showAlert("Searching for address...", "info");
+    geocodeAddress(type);
 }
 
 // Update marker on map
 function updateMarker(type, lat, lng) {
-    const color = type === 'pickup' ? 'blue' : 'green';
-    const icon = L.divIcon({
+    // Professional truck icons
+    const pickupIcon = L.divIcon({
         className: 'custom-marker',
-        html: `<div style="background-color:${color}; width:20px; height:20px; border-radius:50%; border:2px solid white;"></div>`,
-        iconSize: [24, 24]
+        html: `<div style="background: linear-gradient(135deg, #4361ee, #3a0ca3); 
+                       width: 40px; height: 40px; border-radius: 50%; 
+                       border: 3px solid white; box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+                       display: flex; align-items: center; justify-content: center;
+                       font-size: 18px; color: white;">
+                  <i class="fas fa-warehouse"></i>
+               </div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 40]
+    });
+    
+    const dropoffIcon = L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="background: linear-gradient(135deg, #4cc9f0, #2a9d8f); 
+                       width: 40px; height: 40px; border-radius: 50%; 
+                       border: 3px solid white; box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+                       display: flex; align-items: center; justify-content: center;
+                       font-size: 18px; color: white;">
+                  <i class="fas fa-home"></i>
+               </div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 40]
     });
     
     if (type === 'pickup') {
         if (pickupMarker) map.removeLayer(pickupMarker);
-        pickupMarker = L.marker([lat, lng], { icon }).addTo(map)
-            .bindPopup(type === 'pickup' ? 'Pickup Location' : 'Drop-off Location');
+        pickupMarker = L.marker([lat, lng], { icon: pickupIcon }).addTo(map)
+            .bindPopup('<b>🚚 Pickup Location</b>');
     } else {
         if (dropoffMarker) map.removeLayer(dropoffMarker);
-        dropoffMarker = L.marker([lat, lng], { icon }).addTo(map)
-            .bindPopup(type === 'pickup' ? 'Pickup Location' : 'Drop-off Location');
+        dropoffMarker = L.marker([lat, lng], { icon: dropoffIcon }).addTo(map)
+            .bindPopup('<b>📦 Drop-off Location</b>');
+    }
+    
+    // Update route line
+    updateRouteLine();
+}
+
+// Update route line between points
+function updateRouteLine() {
+    if (window.routeLine) map.removeLayer(window.routeLine);
+    
+    if (currentPickup && currentDropoff) {
+        window.routeLine = L.polyline([
+            [currentPickup.lat, currentPickup.lng],
+            [currentDropoff.lat, currentDropoff.lng]
+        ], {
+            color: '#4361ee',
+            weight: 4,
+            opacity: 0.7,
+            dashArray: '10, 10'
+        }).addTo(map);
+        
+        // Fit map to show both points
+        const bounds = L.latLngBounds(
+            [currentPickup.lat, currentPickup.lng],
+            [currentDropoff.lat, currentDropoff.lng]
+        );
+        map.fitBounds(bounds.pad(0.2));
     }
 }
 
-// Simple distance calculation
+// Calculate distance
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth's radius in km
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -74,7 +158,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 // Calculate quote
 function calculateQuote() {
     if (!currentPickup || !currentDropoff) {
-        alert("Please set both pickup and drop-off locations");
+        showAlert("Please set both pickup and drop-off locations", "warning");
         return;
     }
     
@@ -86,32 +170,35 @@ function calculateQuote() {
     const rate = parseFloat(document.getElementById('rate').value);
     const total = distance * rate;
     
-    document.getElementById('distance').textContent = distance.toFixed(2);
-    document.getElementById('rateDisplay').textContent = rate;
-    document.getElementById('total').textContent = total.toFixed(2);
+    // Update display
+    document.getElementById('distanceDisplay').textContent = distance.toFixed(2) + ' km';
+    document.getElementById('rateDisplay').textContent = rate.toFixed(2);
+    document.getElementById('totalDisplay').textContent = 'R' + total.toFixed(2);
     
-    // Draw line between points
-    if (window.routeLine) map.removeLayer(window.routeLine);
-    window.routeLine = L.polyline([
-        [currentPickup.lat, currentPickup.lng],
-        [currentDropoff.lat, currentDropoff.lng]
-    ], { color: 'red' }).addTo(map);
+    // Estimate time (avg 40km/h in city)
+    const estimatedMinutes = Math.max(10, Math.round((distance / 40) * 60));
+    document.getElementById('timeDisplay').textContent = estimatedMinutes + '-'
+        + (estimatedMinutes + 5) + ' min';
     
-    // Fit map to show both points
-    const bounds = L.latLngBounds([currentPickup.lat, currentPickup.lng], [currentDropoff.lat, currentDropoff.lng]);
-    map.fitBounds(bounds);
+    // Show results
+    document.getElementById('quoteResult').style.display = 'block';
+    
+    // Scroll to results
+    document.getElementById('quoteResult').scrollIntoView({ behavior: 'smooth' });
+    
+    showAlert("Quote calculated successfully!", "success");
 }
 
-// Save quote to history
+// Save quote
 function saveQuote() {
     if (!currentPickup || !currentDropoff) {
-        alert("Please calculate a quote first");
+        showAlert("Please calculate a quote first", "warning");
         return;
     }
     
-    const distance = parseFloat(document.getElementById('distance').textContent);
-    const rate = parseFloat(document.getElementById('rateDisplay').textContent);
-    const total = parseFloat(document.getElementById('total').textContent);
+    const distance = parseFloat(document.getElementById('distanceDisplay').textContent);
+    const rate = parseFloat(document.getElementById('rate').value);
+    const total = parseFloat(document.getElementById('totalDisplay').textContent.replace('R', ''));
     
     const quote = {
         id: Date.now(),
@@ -120,42 +207,73 @@ function saveQuote() {
         distance: distance,
         rate: rate,
         total: total,
-        date: new Date().toLocaleString()
+        date: new Date().toLocaleString('en-ZA', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
     };
     
-    quotes.unshift(quote); // Add to beginning
-    if (quotes.length > 50) quotes = quotes.slice(0, 50); // Keep only last 50
+    quotes.unshift(quote);
+    if (quotes.length > 50) quotes = quotes.slice(0, 50);
     
     localStorage.setItem('deliveryQuotes', JSON.stringify(quotes));
     loadHistory();
-    alert("Quote saved to history!");
+    
+    showAlert("Quote saved to history!", "success");
 }
 
 // Load history
 function loadHistory() {
     const historyDiv = document.getElementById('history');
-    historyDiv.innerHTML = '';
+    const emptyDiv = document.getElementById('emptyHistory');
     
     if (quotes.length === 0) {
-        historyDiv.innerHTML = '<p>No quotes yet</p>';
+        emptyDiv.style.display = 'block';
+        historyDiv.innerHTML = '';
+        historyDiv.appendChild(emptyDiv);
         return;
     }
+    
+    emptyDiv.style.display = 'none';
+    historyDiv.innerHTML = '';
     
     quotes.forEach(quote => {
         const div = document.createElement('div');
         div.className = 'history-item';
         div.innerHTML = `
-            <p><strong>${quote.date}</strong></p>
-            <p>Distance: ${quote.distance.toFixed(2)} km</p>
-            <p>Rate: R${quote.rate}/km</p>
-            <p><strong>Total: R${quote.total.toFixed(2)}</strong></p>
-            <button onclick="loadQuote(${quote.id})" style="padding:5px 10px; font-size:14px;">Load This Quote</button>
+            <div class="history-header">
+                <div class="history-date">
+                    <i class="far fa-calendar"></i> ${quote.date}
+                </div>
+                <div class="history-price">R${quote.total.toFixed(2)}</div>
+            </div>
+            <div class="history-details">
+                <div>
+                    <small>Distance</small>
+                    <div><strong>${quote.distance.toFixed(2)} km</strong></div>
+                </div>
+                <div>
+                    <small>Rate</small>
+                    <div><strong>R${quote.rate}/km</strong></div>
+                </div>
+                <div>
+                    <button onclick="loadQuote(${quote.id})" style="
+                        background: linear-gradient(135deg, #4361ee, #3a0ca3);
+                        color: white; border: none; padding: 8px 15px;
+                        border-radius: 5px; cursor: pointer; font-size: 14px;">
+                        <i class="fas fa-redo"></i> Reload
+                    </button>
+                </div>
+            </div>
         `;
         historyDiv.appendChild(div);
     });
 }
 
-// Load a previous quote
+// Load previous quote
 function loadQuote(id) {
     const quote = quotes.find(q => q.id === id);
     if (quote) {
@@ -166,30 +284,22 @@ function loadQuote(id) {
         updateMarker('dropoff', quote.dropoff.lat, quote.dropoff.lng);
         
         document.getElementById('rate').value = quote.rate;
-        document.getElementById('distance').textContent = quote.distance.toFixed(2);
-        document.getElementById('rateDisplay').textContent = quote.rate;
-        document.getElementById('total').textContent = quote.total.toFixed(2);
+        document.getElementById('pickupAddress').value = 'Previous pickup location';
+        document.getElementById('dropoffAddress').value = 'Previous drop-off location';
         
-        // Draw line
-        if (window.routeLine) map.removeLayer(window.routeLine);
-        window.routeLine = L.polyline([
-            [quote.pickup.lat, quote.pickup.lng],
-            [quote.dropoff.lat, quote.dropoff.lng]
-        ], { color: 'red' }).addTo(map);
+        showAlert("Previous quote loaded!", "info");
         
-        const bounds = L.latLngBounds([quote.pickup.lat, quote.pickup.lng], [quote.dropoff.lat, quote.dropoff.lng]);
-        map.fitBounds(bounds);
-        
-        alert("Quote loaded!");
+        // Auto-calculate
+        setTimeout(calculateQuote, 500);
     }
 }
 
-// Simple geocoding using OpenStreetMap
+// Geocode address
 function geocodeAddress(type) {
     const address = document.getElementById(`${type}Address`).value;
     if (!address) return;
     
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`)
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&countrycodes=za`)
         .then(response => response.json())
         .then(data => {
             if (data.length > 0) {
@@ -205,35 +315,57 @@ function geocodeAddress(type) {
                 }
                 
                 map.setView([lat, lng], 15);
+                showAlert("Address found on map!", "success");
             } else {
-                alert("Address not found");
+                showAlert("Address not found. Please try a different address.", "error");
             }
+        })
+        .catch(() => {
+            showAlert("Search service unavailable. Please try again.", "error");
         });
 }
 
-// Reverse geocode to get address
+// Reverse geocode
 function reverseGeocode(lat, lng, elementId) {
-    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`)
         .then(response => response.json())
         .then(data => {
             if (data.display_name) {
-                document.getElementById(elementId).value = data.display_name;
+                // Shorten address for display
+                const address = data.display_name.split(',')[0];
+                document.getElementById(elementId).value = address;
             }
         });
 }
 
-// Start delivery (optional tracking)
+// Start delivery
 function startDelivery() {
     if (!currentPickup || !currentDropoff) {
-        alert("Please set locations first");
+        showAlert("Please set locations first", "warning");
         return;
     }
     
-    if (confirm("Start delivery with this quote?")) {
-        // Simple tracking would start here
-        alert("Delivery started! (Tracking would begin here)");
+    if (confirm("Start delivery with this quote?\n\nTotal: " + document.getElementById('totalDisplay').textContent)) {
+        showAlert("Delivery started! Tracking activated.", "success");
+        // Here you would add tracking functionality
+    }
+}
+
+// Show alert
+function showAlert(message, type) {
+    // Simple alert for now - could be enhanced with toast notifications
+    console.log(`${type.toUpperCase()}: ${message}`);
+}
+
+// Update quote display
+function updateQuoteDisplay() {
+    if (quotes.length > 0) {
+        const lastQuote = quotes[0];
+        document.getElementById('distanceDisplay').textContent = lastQuote.distance.toFixed(2) + ' km';
+        document.getElementById('rateDisplay').textContent = lastQuote.rate;
+        document.getElementById('totalDisplay').textContent = 'R' + lastQuote.total.toFixed(2);
     }
 }
 
 // Initialize when page loads
-window.onload = initMap;
+window.onload = initApp;
