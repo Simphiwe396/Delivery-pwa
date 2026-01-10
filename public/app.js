@@ -16,28 +16,26 @@ document.addEventListener('DOMContentLoaded', function() {
   loadHistory();
   loadActiveTrips();
   setupServiceWorker();
-  setupInstallPrompt();
+  
+  // Add button event listeners
+  document.getElementById('startBtn').addEventListener('click', startTrip);
+  document.getElementById('finishBtn').addEventListener('click', finishTrip);
+  document.getElementById('cancelBtn').addEventListener('click', cancelTrip);
 });
 
 // Tab switching
 function showTab(tabName) {
-  // Hide all tabs
   document.querySelectorAll('.tab-content').forEach(tab => {
     tab.classList.remove('active');
   });
   
-  // Remove active class from all buttons
   document.querySelectorAll('.tab-button').forEach(button => {
     button.classList.remove('active');
   });
   
-  // Show selected tab
   document.getElementById(`${tabName}-tab`).classList.add('active');
-  
-  // Activate corresponding button
   event.target.classList.add('active');
   
-  // Resize maps when switching tabs
   setTimeout(() => {
     if (map) map.invalidateSize();
     if (trackingMap) trackingMap.invalidateSize();
@@ -46,23 +44,22 @@ function showTab(tabName) {
 
 // Initialize maps
 function initializeMaps() {
-  // Main map for rider
-  map = L.map('map').setView([-26.2041, 28.0473], 13); // Johannesburg coordinates
+  map = L.map('map').setView([-26.2041, 28.0473], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map);
   
-  // Tracking map for customer
   trackingMap = L.map('trackingMap').setView([-26.2041, 28.0473], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(trackingMap);
   
-  // Get current location
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(position => {
       const { latitude, longitude } = position.coords;
       map.setView([latitude, longitude], 15);
+    }, () => {
+      console.log('Could not get current location');
     });
   }
 }
@@ -124,7 +121,11 @@ async function startTrip() {
   navigator.geolocation.getCurrentPosition(async position => {
     const { latitude, longitude } = position.coords;
     
-    // Create marker
+    // Clear any existing marker
+    if (marker) {
+      map.removeLayer(marker);
+    }
+    
     marker = L.marker([latitude, longitude], {
       icon: L.icon({
         iconUrl: 'https://unpkg.com/leaflet/dist/images/marker-icon.png',
@@ -135,7 +136,7 @@ async function startTrip() {
     
     map.setView([latitude, longitude], 15);
     
-    const riderName = document.getElementById('riderName').value;
+    const riderName = document.getElementById('riderName').value || 'Delivery Rider';
     const rate = parseFloat(document.getElementById('rate').value);
     
     try {
@@ -150,19 +151,25 @@ async function startTrip() {
           pickupLng: longitude,
           lat: latitude,
           lng: longitude,
-          rate
+          rate,
+          status: 'active',
+          distance: 0,
+          fare: 0
         })
       });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create trip');
+      }
       
       const trip = await response.json();
       tripId = trip._id;
       currentTrip = trip;
       startTime = new Date();
       
-      // Start timer
       startTimer();
       
-      // Start watching position
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleGeolocationError,
@@ -173,14 +180,12 @@ async function startTrip() {
         }
       );
       
-      // Update UI
       document.getElementById('startBtn').disabled = true;
       document.getElementById('finishBtn').disabled = false;
       document.getElementById('cancelBtn').disabled = false;
       
       updateTripInfo(trip);
       
-      // Emit trip started
       socket.emit('driverStatus', {
         tripId: trip._id,
         status: 'active',
@@ -189,11 +194,13 @@ async function startTrip() {
         lng: longitude
       });
       
+      console.log('Trip started:', trip._id);
+      
     } catch (error) {
       console.error('Error starting trip:', error);
-      alert('Failed to start trip. Please try again.');
+      alert('Failed to start trip: ' + error.message);
     }
-  });
+  }, handleGeolocationError);
 }
 
 // Update location
@@ -206,18 +213,16 @@ function updateLocation(position) {
   
   map.setView([latitude, longitude], 15);
   
-  if (tripId) {
-    // Calculate distance
+  if (tripId && currentTrip) {
     const distance = calculateDistance(
-      currentTrip.pickupLat,
-      currentTrip.pickupLng,
+      currentTrip.pickupLat || latitude,
+      currentTrip.pickupLng || longitude,
       latitude,
       longitude
     );
     
-    const fare = distance * currentTrip.rate;
+    const fare = distance * (currentTrip.rate || 10);
     
-    // Update trip info
     updateTripInfo({
       distance: distance.toFixed(2),
       fare: fare.toFixed(2)
@@ -237,6 +242,8 @@ function updateLocation(position) {
         fare: parseFloat(fare.toFixed(2)),
         status: 'active'
       })
+    }).catch(error => {
+      console.error('Error updating location:', error);
     });
     
     // Emit real-time update
@@ -258,19 +265,26 @@ function handleGeolocationError(error) {
 
 // Finish trip
 async function finishTrip() {
-  if (!tripId || !navigator.geolocation) return;
+  if (!tripId || !navigator.geolocation) {
+    alert('No active trip to finish');
+    return;
+  }
+  
+  if (!confirm('Finish this delivery trip?')) {
+    return;
+  }
   
   navigator.geolocation.getCurrentPosition(async position => {
     const { latitude, longitude } = position.coords;
     
     const distance = calculateDistance(
-      currentTrip.pickupLat,
-      currentTrip.pickupLng,
+      currentTrip.pickupLat || latitude,
+      currentTrip.pickupLng || longitude,
       latitude,
       longitude
     );
     
-    const fare = distance * currentTrip.rate;
+    const fare = distance * (currentTrip.rate || 10);
     
     try {
       const response = await fetch('/api/finish-trip', {
@@ -287,11 +301,16 @@ async function finishTrip() {
         })
       });
       
+      if (!response.ok) {
+        throw new Error('Failed to finish trip');
+      }
+      
       const trip = await response.json();
       
       // Stop watching position
       if (watchId) {
         navigator.geolocation.clearWatch(watchId);
+        watchId = null;
       }
       
       // Stop timer
@@ -302,67 +321,93 @@ async function finishTrip() {
       document.getElementById('finishBtn').disabled = true;
       document.getElementById('cancelBtn').disabled = true;
       document.getElementById('status').textContent = 'Completed';
+      document.getElementById('duration').textContent = '00:00';
       
       // Clear trip data
       tripId = null;
       currentTrip = null;
       
+      // Remove marker
+      if (marker) {
+        map.removeLayer(marker);
+        marker = null;
+      }
+      
       // Load updated history
       loadHistory();
       loadActiveTrips();
       
-      alert(`Trip completed! Distance: ${distance.toFixed(2)}km, Fare: R${fare.toFixed(2)}`);
+      alert(`Trip completed!\nDistance: ${distance.toFixed(2)}km\nFare: R${fare.toFixed(2)}`);
       
     } catch (error) {
       console.error('Error finishing trip:', error);
       alert('Failed to finish trip. Please try again.');
     }
-  });
+  }, handleGeolocationError);
 }
 
 // Cancel trip
 async function cancelTrip() {
-  if (!tripId) return;
+  if (!tripId) {
+    alert('No active trip to cancel');
+    return;
+  }
   
-  if (confirm('Are you sure you want to cancel this trip?')) {
-    try {
-      await fetch('/api/update-location', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          id: tripId,
-          status: 'cancelled'
-        })
-      });
-      
-      // Stop watching position
-      if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
-      }
-      
-      // Stop timer
-      stopTimer();
-      
-      // Update UI
-      document.getElementById('startBtn').disabled = false;
-      document.getElementById('finishBtn').disabled = true;
-      document.getElementById('cancelBtn').disabled = true;
-      document.getElementById('status').textContent = 'Cancelled';
-      
-      // Clear trip data
-      tripId = null;
-      currentTrip = null;
-      
-      // Load updated history
-      loadHistory();
-      loadActiveTrips();
-      
-    } catch (error) {
-      console.error('Error cancelling trip:', error);
-      alert('Failed to cancel trip. Please try again.');
+  if (!confirm('Are you sure you want to cancel this trip?')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/update-location', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: tripId,
+        status: 'cancelled'
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to cancel trip');
     }
+    
+    // Stop watching position
+    if (watchId) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    
+    // Stop timer
+    stopTimer();
+    
+    // Update UI
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('finishBtn').disabled = true;
+    document.getElementById('cancelBtn').disabled = true;
+    document.getElementById('status').textContent = 'Cancelled';
+    document.getElementById('duration').textContent = '00:00';
+    
+    // Remove marker
+    if (marker) {
+      map.removeLayer(marker);
+      marker = null;
+    }
+    
+    // Clear trip data
+    tripId = null;
+    currentTrip = null;
+    
+    // Load updated history
+    loadHistory();
+    loadActiveTrips();
+    
+    alert('Trip cancelled successfully');
+    
+  } catch (error) {
+    console.error('Error cancelling trip:', error);
+    alert('Failed to cancel trip. Please try again.');
   }
 }
 
@@ -370,6 +415,8 @@ async function cancelTrip() {
 async function loadActiveTrips() {
   try {
     const response = await fetch('/api/active-trips');
+    if (!response.ok) return;
+    
     const trips = await response.json();
     
     const selectElement = document.getElementById('tripSelect');
@@ -378,7 +425,7 @@ async function loadActiveTrips() {
     trips.forEach(trip => {
       const option = document.createElement('option');
       option.value = trip._id;
-      option.textContent = `${trip.riderName} - R${trip.rate}/km (${trip.status})`;
+      option.textContent = `${trip.riderName || 'Rider'} - R${trip.rate}/km (${trip.status})`;
       selectElement.appendChild(option);
     });
     
@@ -392,16 +439,13 @@ function selectTripToTrack() {
   selectedTripId = document.getElementById('tripSelect').value;
   
   if (selectedTripId) {
-    // Find the selected trip
     fetch('/api/trips')
       .then(response => response.json())
       .then(trips => {
         const trip = trips.find(t => t._id === selectedTripId);
         if (trip) {
-          // Show tracking info
           document.getElementById('trackingInfo').classList.remove('hidden');
           
-          // Update driver marker
           if (driverMarker) {
             trackingMap.removeLayer(driverMarker);
           }
@@ -416,10 +460,7 @@ function selectTripToTrack() {
           
           trackingMap.setView([trip.lat, trip.lng], 15);
           
-          // Update tracking info
           updateTrackingInfo(trip);
-          
-          // Listen for updates
           socket.emit('trackTrip', selectedTripId);
         }
       });
@@ -453,6 +494,8 @@ function navigateToDriver() {
 async function loadHistory() {
   try {
     const response = await fetch('/api/trips');
+    if (!response.ok) return;
+    
     const trips = await response.json();
     
     const historyBody = document.getElementById('historyBody');
@@ -480,13 +523,11 @@ async function loadHistory() {
       
       historyBody.appendChild(row);
       
-      // Update totals
       totalTrips++;
       totalDistance += parseFloat(distance);
       totalEarnings += parseFloat(fare);
     });
     
-    // Update stats
     document.getElementById('totalTrips').textContent = totalTrips;
     document.getElementById('totalDistance').textContent = totalDistance.toFixed(2);
     document.getElementById('totalEarnings').textContent = totalEarnings.toFixed(2);
@@ -524,6 +565,10 @@ function updateTripInfo(trip) {
 function startTimer() {
   startTime = new Date();
   
+  if (timerInterval) {
+    clearInterval(timerInterval);
+  }
+  
   timerInterval = setInterval(() => {
     if (startTime) {
       const now = new Date();
@@ -531,7 +576,7 @@ function startTimer() {
       const minutes = Math.floor(diff / 60);
       const seconds = diff % 60;
       document.getElementById('duration').textContent = 
-        `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
   }, 1000);
 }
@@ -544,9 +589,9 @@ function stopTimer() {
   }
 }
 
-// Calculate distance between two coordinates (Haversine formula)
+// Calculate distance between two coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth's radius in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = 
@@ -568,48 +613,4 @@ function setupServiceWorker() {
         console.error('Service Worker registration failed:', error);
       });
   }
-}
-
-// Setup install prompt
-function setupInstallPrompt() {
-  let deferredPrompt;
-  
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    
-    // Show install prompt
-    const installPrompt = document.createElement('div');
-    installPrompt.className = 'install-prompt';
-    installPrompt.innerHTML = `
-      <div>
-        <strong>Install Delivery Tracker App</strong>
-        <p>Install for better experience</p>
-      </div>
-      <button class="install-btn" onclick="installApp()">Install</button>
-      <button class="dismiss-btn" onclick="dismissInstallPrompt()">Later</button>
-    `;
-    
-    document.body.appendChild(installPrompt);
-  });
-  
-  window.installApp = function() {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(choiceResult => {
-        if (choiceResult.outcome === 'accepted') {
-          console.log('User accepted install');
-        }
-        deferredPrompt = null;
-      });
-    }
-    dismissInstallPrompt();
-  };
-  
-  window.dismissInstallPrompt = function() {
-    const prompt = document.querySelector('.install-prompt');
-    if (prompt) {
-      prompt.remove();
-    }
-  };
 }
