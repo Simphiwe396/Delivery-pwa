@@ -1,16 +1,15 @@
-// QuickQuote Pro - Professional Delivery Calculator
-let map;
-let pickupMarker, dropoffMarker;
+// QuickQuote Pro - Professional Delivery Calculator (No Map Version)
 let quotes = JSON.parse(localStorage.getItem('deliveryQuotes') || '[]');
 let currentPickup = null;
 let currentDropoff = null;
+let isOnline = navigator.onLine;
 
-// SOUTH AFRICAN CITIES DATABASE - INCLUDES KEMPTON PARK
+// South African Cities Database
 const saCities = {
-    // Gauteng - INCLUDES KEMPTON PARK
+    // Gauteng
     "johannesburg": [-26.2041, 28.0473],
     "pretoria": [-25.7479, 28.2293],
-    "kempton park": [-26.1103, 28.2285], // <-- THIS IS THE FIX
+    "kempton park": [-26.1103, 28.2285],
     "sandton": [-26.107, 28.0517],
     "randburg": [-26.0946, 28.0012],
     "midrand": [-25.989, 28.128],
@@ -87,47 +86,87 @@ const saCities = {
     // Airports
     "or tambo airport": [-26.133, 28.246],
     "cape town international": [-33.965, 18.602],
-    "king shaka airport": [-29.614, 31.120],
-    
-    // Specific for your client
-    "birchleigh": [-26.100, 28.230],
-    "birchleigh north": [-26.095, 28.225]
+    "king shaka airport": [-29.614, 31.120]
 };
 
 // Initialize app
 function initApp() {
-    initMap();
+    checkOnlineStatus();
     loadHistory();
+    setupEventListeners();
     
-    // Show welcome message
+    // Show welcome
     if (!localStorage.getItem('welcomeShown')) {
         setTimeout(() => {
-            alert("🚚 Welcome to QuickQuote Pro!\n\n1. Enter pickup & drop-off locations\n2. Choose your rate (R5-R20/km)\n3. Get instant delivery quotes\n4. Save for your records");
+            showMessage("🚚 Welcome to QuickQuote Pro!", "info");
             localStorage.setItem('welcomeShown', 'true');
         }, 1000);
     }
 }
 
-// Initialize map
-function initMap() {
-    map = L.map('map').setView([-26.1103, 28.2285], 13); // Start at Kempton Park
+// Check online/offline status
+function checkOnlineStatus() {
+    isOnline = navigator.onLine;
+    document.body.classList.toggle('offline', !isOnline);
     
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap, © CartoDB',
-        maxZoom: 19
-    }).addTo(map);
+    if (!isOnline) {
+        showMessage("⚡ Working offline - Quotes saved locally", "warning");
+    }
+}
+
+// Setup event listeners
+function setupEventListeners() {
+    // Online/offline detection
+    window.addEventListener('online', () => {
+        isOnline = true;
+        document.body.classList.remove('offline');
+        showMessage("✅ Back online", "success");
+    });
     
-    L.control.scale().addTo(map);
+    window.addEventListener('offline', () => {
+        isOnline = false;
+        document.body.classList.add('offline');
+        showMessage("⚡ Working offline", "warning");
+    });
+    
+    // Enter key for address fields
+    document.getElementById('pickupAddress').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') geocodeAddress('pickup');
+    });
+    
+    document.getElementById('dropoffAddress').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') geocodeAddress('dropoff');
+    });
+    
+    // Auto-search when typing stops
+    let pickupTimeout, dropoffTimeout;
+    document.getElementById('pickupAddress').addEventListener('input', (e) => {
+        clearTimeout(pickupTimeout);
+        pickupTimeout = setTimeout(() => {
+            if (e.target.value.length > 2) {
+                geocodeAddress('pickup');
+            }
+        }, 1000);
+    });
+    
+    document.getElementById('dropoffAddress').addEventListener('input', (e) => {
+        clearTimeout(dropoffTimeout);
+        dropoffTimeout = setTimeout(() => {
+            if (e.target.value.length > 2) {
+                geocodeAddress('dropoff');
+            }
+        }, 1000);
+    });
 }
 
 // Use current location
 function useMyLocation(type) {
     if (!navigator.geolocation) {
-        alert("Geolocation not available");
+        showMessage("Geolocation not available", "error");
         return;
     }
     
-    alert("Getting your location...");
+    showMessage("Getting your location...", "info");
     
     navigator.geolocation.getCurrentPosition(position => {
         const lat = position.coords.latitude;
@@ -135,158 +174,84 @@ function useMyLocation(type) {
         
         if (type === 'pickup') {
             currentPickup = { lat, lng };
-            updateMarker('pickup', lat, lng);
-            alert("Pickup location set to your current position");
+            document.getElementById('pickupAddress').value = 'My Location';
+            showMessage("Pickup location set to your current position", "success");
         } else {
             currentDropoff = { lat, lng };
-            updateMarker('dropoff', lat, lng);
-            alert("Drop-off location set to your current position");
+            document.getElementById('dropoffAddress').value = 'My Location';
+            showMessage("Drop-off location set to your current position", "success");
         }
         
-        map.setView([lat, lng], 15);
+        // Auto-calculate if both locations set
+        if (currentPickup && currentDropoff) {
+            setTimeout(calculateQuote, 500);
+        }
     }, () => {
-        alert("Could not get your location");
+        showMessage("Could not get location. Please enable location services.", "error");
     });
 }
 
-// Add this function to your app.js (anywhere near other functions)
-function geocodeCurrent(type) {
-    const address = document.getElementById(`${type}Address`).value;
-    if (!address) {
-        alert("Please enter an address first");
-        return;
-    }
-    
-    geocodeAddress(type);
-}
-
-// Geocode address - FIXED VERSION
+// Geocode address
 function geocodeAddress(type) {
     const addressInput = document.getElementById(`${type}Address`).value.toLowerCase().trim();
     
     if (!addressInput) {
-        alert("Please enter an address");
+        showMessage("Please enter an address", "warning");
         return;
     }
     
-    // Check SA cities database FIRST
+    // Check SA cities database (works offline)
     for (const [city, coords] of Object.entries(saCities)) {
-        if (addressInput.includes(city)) {
+        if (addressInput.includes(city) || city.includes(addressInput)) {
             const lat = coords[0];
             const lng = coords[1];
             
             if (type === 'pickup') {
                 currentPickup = { lat, lng };
-                updateMarker('pickup', lat, lng);
             } else {
                 currentDropoff = { lat, lng };
-                updateMarker('dropoff', lat, lng);
             }
             
-            map.setView([lat, lng], 15);
             document.getElementById(`${type}Address`).value = city.charAt(0).toUpperCase() + city.slice(1);
-            alert(`Location set to ${city.charAt(0).toUpperCase() + city.slice(1)}`);
+            showMessage(`Location set to ${city.charAt(0).toUpperCase() + city.slice(1)}`, "success");
             
             if (currentPickup && currentDropoff) {
                 setTimeout(calculateQuote, 500);
             }
-            return; // Exit function - FOUND!
+            return;
         }
     }
     
-    // If not found in database, try OpenStreetMap
-    alert("Searching online...");
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressInput + ', South Africa')}&limit=1`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.length > 0) {
-                const lat = parseFloat(data[0].lat);
-                const lng = parseFloat(data[0].lon);
-                
-                if (type === 'pickup') {
-                    currentPickup = { lat, lng };
-                    updateMarker('pickup', lat, lng);
+    // If not in database and online, try OpenStreetMap
+    if (isOnline) {
+        showMessage("Searching online...", "info");
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressInput + ', South Africa')}&limit=1`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lng = parseFloat(data[0].lon);
+                    
+                    if (type === 'pickup') {
+                        currentPickup = { lat, lng };
+                    } else {
+                        currentDropoff = { lat, lng };
+                    }
+                    
+                    showMessage("Address found!", "success");
+                    
+                    if (currentPickup && currentDropoff) {
+                        setTimeout(calculateQuote, 500);
+                    }
                 } else {
-                    currentDropoff = { lat, lng };
-                    updateMarker('dropoff', lat, lng);
+                    showMessage("Address not found. Try a city name like 'Johannesburg' or 'Cape Town'", "error");
                 }
-                
-                map.setView([lat, lng], 15);
-                alert("Address found!");
-                
-                if (currentPickup && currentDropoff) {
-                    setTimeout(calculateQuote, 500);
-                }
-            } else {
-                alert(`Try these cities: Johannesburg, Cape Town, Durban, Pretoria, Kempton Park, Sandton, etc.`);
-            }
-        })
-        .catch(error => {
-            alert("Search service unavailable. Try 'Use My Location' or enter a city name.");
-        });
-}
-
-// Update marker
-function updateMarker(type, lat, lng) {
-    const pickupIcon = L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="background: linear-gradient(135deg, #4361ee, #3a0ca3); 
-                       width: 40px; height: 40px; border-radius: 50%; 
-                       border: 3px solid white; box-shadow: 0 3px 10px rgba(0,0,0,0.3);
-                       display: flex; align-items: center; justify-content: center;
-                       font-size: 18px; color: white;">
-                  <i class="fas fa-warehouse"></i>
-               </div>`,
-        iconSize: [40, 40],
-        iconAnchor: [20, 40]
-    });
-    
-    const dropoffIcon = L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="background: linear-gradient(135deg, #4cc9f0, #2a9d8f); 
-                       width: 40px; height: 40px; border-radius: 50%; 
-                       border: 3px solid white; box-shadow: 0 3px 10px rgba(0,0,0,0.3);
-                       display: flex; align-items: center; justify-content: center;
-                       font-size: 18px; color: white;">
-                  <i class="fas fa-home"></i>
-               </div>`,
-        iconSize: [40, 40],
-        iconAnchor: [20, 40]
-    });
-    
-    if (type === 'pickup') {
-        if (pickupMarker) map.removeLayer(pickupMarker);
-        pickupMarker = L.marker([lat, lng], { icon: pickupIcon }).addTo(map)
-            .bindPopup('<b>🚚 Pickup Location</b>');
+            })
+            .catch(() => {
+                showMessage("Search unavailable. Try 'Use My Location' or enter a city name.", "error");
+            });
     } else {
-        if (dropoffMarker) map.removeLayer(dropoffMarker);
-        dropoffMarker = L.marker([lat, lng], { icon: dropoffIcon }).addTo(map)
-            .bindPopup('<b>📦 Drop-off Location</b>');
-    }
-    
-    updateRouteLine();
-}
-
-// Update route line
-function updateRouteLine() {
-    if (window.routeLine) map.removeLayer(window.routeLine);
-    
-    if (currentPickup && currentDropoff) {
-        window.routeLine = L.polyline([
-            [currentPickup.lat, currentPickup.lng],
-            [currentDropoff.lat, currentDropoff.lng]
-        ], {
-            color: '#4361ee',
-            weight: 4,
-            opacity: 0.7,
-            dashArray: '10, 10'
-        }).addTo(map);
-        
-        const bounds = L.latLngBounds(
-            [currentPickup.lat, currentPickup.lng],
-            [currentDropoff.lat, currentDropoff.lng]
-        );
-        map.fitBounds(bounds.pad(0.2));
+        showMessage("Offline - Enter a South African city name (e.g., Johannesburg, Cape Town)", "warning");
     }
 }
 
@@ -304,7 +269,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 // Calculate quote
 function calculateQuote() {
     if (!currentPickup || !currentDropoff) {
-        alert("Please set both pickup and drop-off locations");
+        showMessage("Please set both pickup and drop-off locations", "warning");
         return;
     }
     
@@ -326,13 +291,13 @@ function calculateQuote() {
     document.getElementById('quoteResult').style.display = 'block';
     document.getElementById('quoteResult').scrollIntoView({ behavior: 'smooth' });
     
-    alert("Quote calculated successfully!");
+    showMessage("Quote calculated successfully!", "success");
 }
 
 // Save quote
 function saveQuote() {
     if (!currentPickup || !currentDropoff) {
-        alert("Please calculate a quote first");
+        showMessage("Please calculate a quote first", "warning");
         return;
     }
     
@@ -353,7 +318,8 @@ function saveQuote() {
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit'
-        })
+        }),
+        synced: isOnline
     };
     
     quotes.unshift(quote);
@@ -362,7 +328,7 @@ function saveQuote() {
     localStorage.setItem('deliveryQuotes', JSON.stringify(quotes));
     loadHistory();
     
-    alert("Quote saved to history!");
+    showMessage("Quote saved!" + (!isOnline ? " (Will sync when online)" : ""), "success");
 }
 
 // Load history
@@ -387,6 +353,7 @@ function loadHistory() {
             <div class="history-header">
                 <div class="history-date">
                     <i class="far fa-calendar"></i> ${quote.date}
+                    ${!quote.synced ? '<i class="fas fa-cloud-upload-alt" style="margin-left: 5px; color: #f39c12;"></i>' : ''}
                 </div>
                 <div class="history-price">R${quote.total.toFixed(2)}</div>
             </div>
@@ -420,14 +387,11 @@ function loadQuote(id) {
         currentPickup = quote.pickup;
         currentDropoff = quote.dropoff;
         
-        updateMarker('pickup', quote.pickup.lat, quote.pickup.lng);
-        updateMarker('dropoff', quote.dropoff.lat, quote.dropoff.lng);
-        
         document.getElementById('rate').value = quote.rate;
         document.getElementById('pickupAddress').value = 'Previous pickup location';
         document.getElementById('dropoffAddress').value = 'Previous drop-off location';
         
-        alert("Previous quote loaded!");
+        showMessage("Previous quote loaded!", "info");
         setTimeout(calculateQuote, 500);
     }
 }
@@ -435,14 +399,52 @@ function loadQuote(id) {
 // Start delivery
 function startDelivery() {
     if (!currentPickup || !currentDropoff) {
-        alert("Please set locations first");
+        showMessage("Please set locations first", "warning");
         return;
     }
     
     if (confirm("Start delivery with this quote?\n\nTotal: " + document.getElementById('totalDisplay').textContent)) {
-        alert("Delivery started!");
+        showMessage("Delivery started!", "success");
     }
 }
 
-// Initialize when page loads
+// Show message
+function showMessage(message, type = "info") {
+    // Create toast notification
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <div class="toast-content">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+}
+
+// Initialize
 window.onload = initApp;
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('ServiceWorker registered');
+            })
+            .catch(error => {
+                console.log('ServiceWorker registration failed:', error);
+            });
+    });
+}

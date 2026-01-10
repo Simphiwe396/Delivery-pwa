@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🚚 QuickQuote Pro - Delivery Calculator</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <style>
         :root {
             --primary: #4361ee;
@@ -31,7 +30,7 @@
         }
         
         .container {
-            max-width: 1000px;
+            max-width: 800px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
@@ -160,13 +159,6 @@
             margin-top: 20px;
         }
         
-        #map {
-            height: 300px;
-            border-radius: 10px;
-            margin-top: 15px;
-            border: 2px solid #e1e5e9;
-        }
-        
         .quote-result {
             background: white;
             border-radius: 15px;
@@ -260,6 +252,96 @@
             color: #ddd;
         }
         
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 15px 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            max-width: 350px;
+        }
+        
+        .toast-success {
+            border-left: 4px solid #2ecc71;
+        }
+        
+        .toast-error {
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .toast-warning {
+            border-left: 4px solid #f39c12;
+        }
+        
+        .toast-info {
+            border-left: 4px solid #3498db;
+        }
+        
+        .toast-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .toast-content i {
+            font-size: 18px;
+        }
+        
+        .toast-success .toast-content i { color: #2ecc71; }
+        .toast-error .toast-content i { color: #e74c3c; }
+        .toast-warning .toast-content i { color: #f39c12; }
+        .toast-info .toast-content i { color: #3498db; }
+        
+        .toast.fade-out {
+            animation: fadeOut 0.3s ease forwards;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes fadeOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+        
+        /* Offline indicator */
+        body.offline::before {
+            content: "⚡ Working Offline";
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #f39c12;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 10000;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 border-radius: 10px;
@@ -295,96 +377,6 @@
                 grid-template-columns: 1fr;
             }
         }
-
-/* Offline indicator */
-body.offline::before {
-    content: "⚡ Working Offline";
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: #f39c12;
-    color: white;
-    text-align: center;
-    padding: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    z-index: 10000;
-}
-
-/* Toast notifications */
-.toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: white;
-    border-radius: 10px;
-    padding: 15px 20px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    z-index: 10000;
-    animation: slideIn 0.3s ease;
-    max-width: 350px;
-}
-
-.toast-success {
-    border-left: 4px solid #2ecc71;
-}
-
-.toast-error {
-    border-left: 4px solid #e74c3c;
-}
-
-.toast-warning {
-    border-left: 4px solid #f39c12;
-}
-
-.toast-info {
-    border-left: 4px solid #3498db;
-}
-
-.toast-content {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.toast-content i {
-    font-size: 18px;
-}
-
-.toast-success .toast-content i { color: #2ecc71; }
-.toast-error .toast-content i { color: #e74c3c; }
-.toast-warning .toast-content i { color: #f39c12; }
-.toast-info .toast-content i { color: #3498db; }
-
-.toast.fade-out {
-    animation: fadeOut 0.3s ease forwards;
-}
-
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes fadeOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-}
     </style>
 </head>
 <body>
@@ -405,11 +397,11 @@ body.offline::before {
                         <button class="btn btn-primary" onclick="useMyLocation('pickup')">
                             <i class="fas fa-location-crosshairs"></i> Use My Location
                         </button>
-                        <button class="btn btn-secondary" onclick="geocodeCurrent('pickup')">
-                            <i class="fas fa-search-location"></i> Find on Map
-                        </button>
                     </div>
-                    <input type="text" id="pickupAddress" placeholder="Enter pickup address or business name">
+                    <input type="text" id="pickupAddress" placeholder="Enter pickup city (e.g., Kempton Park)">
+                    <small style="color: var(--gray); display: block; margin-top: 5px;">
+                        Enter South African city name like: Johannesburg, Cape Town, Durban, Pretoria, Kempton Park
+                    </small>
                 </div>
                 
                 <div class="form-group">
@@ -418,14 +410,14 @@ body.offline::before {
                         <button class="btn btn-primary" onclick="useMyLocation('dropoff')">
                             <i class="fas fa-location-crosshairs"></i> Use My Location
                         </button>
-                        <button class="btn btn-secondary" onclick="geocodeCurrent('dropoff')">
-                            <i class="fas fa-search-location"></i> Find on Map
-                        </button>
                     </div>
-                    <input type="text" id="dropoffAddress" placeholder="Enter customer address">
+                    <input type="text" id="dropoffAddress" placeholder="Enter customer city (e.g., Sandton)">
+                    <small style="color: var(--gray); display: block; margin-top: 5px;">
+                        Enter South African city name like: Sandton, Randburg, Midrand, Soweto
+                    </small>
                 </div>
                 
-                <div id="map"></div>
+                <!-- MAP REMOVED -->
             </div>
             
             <!-- Pricing Card -->
@@ -495,7 +487,6 @@ body.offline::before {
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
